@@ -1,4 +1,4 @@
-import type { EventName, Tier } from './events';
+import type { AccessEndpoint, EventName, Tier } from './events';
 
 export type JsonValue =
   | string
@@ -10,6 +10,8 @@ export type JsonValue =
 
 export interface EventProperties {
   tier?: Tier;
+  access_endpoint?: AccessEndpoint;
+  intake_step?: string;
   intervention_type?: string;
   distress_score?: number;
   referral_destination?: string;
@@ -72,6 +74,7 @@ export interface RecentEventItem {
   eventName: EventName;
   occurredAt: string;
   tier?: Tier | null;
+  accessEndpoint?: AccessEndpoint | null;
   interventionType?: string | null;
   referralDestination?: string | null;
   userId: string;
@@ -96,6 +99,7 @@ export interface TrendPoint {
   activeUsers: number;
   interventionsStarted: number;
   referralsCompleted: number;
+  accessCompletions: number;
 }
 
 export interface LeakageUser {
@@ -109,6 +113,11 @@ export interface AnalyticsOverview {
   totalUsers: number;
   activeUsers: number;
   dailyActiveUsers: number;
+  accessStarts: number;
+  accessCompleted: number;
+  accessCompletionRate: number;
+  accessDropOffCount: number;
+  avgMinutesToEndpoint: number | null;
   interventionUptakeRate: number;
   interventionCompletionRate: number;
   referralCompletionRate: number;
@@ -116,7 +125,9 @@ export interface AnalyticsOverview {
   avgHoursToReferral: number | null;
   highRiskLeakageCount: number;
   tierDistribution: Record<Tier | 'unknown', number>;
+  endpointDistribution: Record<AccessEndpoint | 'unknown', number>;
   funnel: FunnelStep[];
+  accessFunnel: FunnelStep[];
   trend: TrendPoint[];
   highRiskLeakageUsers: LeakageUser[];
   recentEvents: RecentEventItem[];
@@ -128,7 +139,9 @@ export interface AnalyticsEventRecord {
   occurredAt: string;
   eventName: EventName;
   tier?: Tier | null;
+  accessEndpoint?: AccessEndpoint | null;
   interventionType?: string | null;
   referralDestination?: string | null;
   distressScore?: number | null;
+  intakeStep?: string | null;
 }

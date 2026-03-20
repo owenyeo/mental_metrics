@@ -1,6 +1,12 @@
 import { differenceInHours, endOfDay, formatISO, isWithinInterval, parseISO, startOfDay } from 'date-fns';
 
-import { HELP_ACTION_EVENTS, HIGH_RISK_SIGNAL_EVENTS, type Tier } from './events';
+import {
+  ACCESS_ENDPOINTS,
+  HELP_ACTION_EVENTS,
+  HIGH_RISK_SIGNAL_EVENTS,
+  type AccessEndpoint,
+  type Tier,
+} from './events';
 import type {
   AnalyticsEventRecord,
   AnalyticsOverview,
@@ -37,6 +43,14 @@ function conversionRate(numerator: number, denominator: number): number {
 }
 
 function average(numbers: number[]): number | null {
+  if (!numbers.length) {
+    return null;
+  }
+
+  return Number((numbers.reduce((sum, value) => sum + value, 0) / numbers.length).toFixed(1));
+}
+
+function averageMinutes(numbers: number[]): number | null {
   if (!numbers.length) {
     return null;
   }
@@ -103,6 +117,36 @@ export function buildFunnel(events: AnalyticsEventRecord[]): FunnelStep[] {
   ];
 }
 
+export function buildAccessFunnel(events: AnalyticsEventRecord[]): FunnelStep[] {
+  const intakeStarted = userSet(events, 'access_intake_started').size || userSet(events, 'screening_started').size;
+  const screeningCompleted = userSet(events, 'screening_completed').size;
+  const pathwayDeterminations = userSet(events, 'care_pathway_determined').size;
+  const accessCompleted = userSet(events, 'access_flow_completed').size;
+
+  return [
+    {
+      step: 'access_intake_started',
+      users: intakeStarted,
+      conversionRate: 100,
+    },
+    {
+      step: 'screening_completed',
+      users: screeningCompleted,
+      conversionRate: conversionRate(screeningCompleted, intakeStarted),
+    },
+    {
+      step: 'care_pathway_determined',
+      users: pathwayDeterminations,
+      conversionRate: conversionRate(pathwayDeterminations, screeningCompleted || intakeStarted),
+    },
+    {
+      step: 'access_flow_completed',
+      users: accessCompleted,
+      conversionRate: conversionRate(accessCompleted, pathwayDeterminations || screeningCompleted),
+    },
+  ];
+}
+
 export function buildInterventionPerformance(
   events: AnalyticsEventRecord[],
 ): InterventionPerformanceRow[] {
@@ -153,6 +197,7 @@ export function buildTrend(events: AnalyticsEventRecord[], filter: DateRangeFilt
       activeUsers: 0,
       interventionsStarted: 0,
       referralsCompleted: 0,
+      accessCompletions: 0,
     });
   }
 
@@ -167,6 +212,9 @@ export function buildTrend(events: AnalyticsEventRecord[], filter: DateRangeFilt
     ).length;
     bucket.referralsCompleted = dailyEvents.filter(
       (event) => event.eventName === 'referral_completed',
+    ).length;
+    bucket.accessCompletions = dailyEvents.filter(
+      (event) => event.eventName === 'access_flow_completed',
     ).length;
   }
 
@@ -251,13 +299,82 @@ function buildTimeToEvent(
   return average(durations);
 }
 
+function buildMinutesToEndpoint(events: AnalyticsEventRecord[]): number | null {
+  const byUser = new Map<string, AnalyticsEventRecord[]>();
+
+  for (const event of events) {
+    const current = byUser.get(event.userId) ?? [];
+    current.push(event);
+    byUser.set(event.userId, current);
+  }
+
+  const durations: number[] = [];
+
+  for (const userEvents of byUser.values()) {
+    const startEvent = userEvents
+      .filter((event) => event.eventName === 'access_intake_started')
+      .sort((left, right) => new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime())[0];
+    const endEvent = userEvents
+      .filter((event) => ['care_pathway_determined', 'access_flow_completed'].includes(event.eventName))
+      .sort((left, right) => new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime())[0];
+
+    if (startEvent && endEvent) {
+      const minutes =
+        (parseISO(endEvent.occurredAt).getTime() - parseISO(startEvent.occurredAt).getTime()) /
+        (1000 * 60);
+      if (minutes >= 0) {
+        durations.push(minutes);
+      }
+    }
+  }
+
+  return averageMinutes(durations);
+}
+
+function buildEndpointDistribution(
+  events: AnalyticsEventRecord[],
+): Record<AccessEndpoint | 'unknown', number> {
+  const distribution: Record<AccessEndpoint | 'unknown', number> = {
+    self_help: 0,
+    peer_support: 0,
+    medical_referral: 0,
+    crisis_support: 0,
+    unknown: 0,
+  };
+
+  const byUser = new Map<string, AnalyticsEventRecord[]>();
+  for (const event of events) {
+    const current = byUser.get(event.userId) ?? [];
+    current.push(event);
+    byUser.set(event.userId, current);
+  }
+
+  for (const userEvents of byUser.values()) {
+    const latestEndpointEvent = [...userEvents]
+      .filter((event) => event.eventName === 'care_pathway_determined' || event.eventName === 'access_flow_completed')
+      .sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime())[0];
+
+    if (!latestEndpointEvent?.accessEndpoint) {
+      distribution.unknown += 1;
+      continue;
+    }
+
+    distribution[latestEndpointEvent.accessEndpoint] += 1;
+  }
+
+  return distribution;
+}
+
 export function buildAnalyticsOverview(
   events: AnalyticsEventRecord[],
   filter: DateRangeFilter,
 ): AnalyticsOverview {
   const filtered = filterAnalyticsEvents(events, filter);
   const funnel = buildFunnel(filtered);
+  const accessFunnel = buildAccessFunnel(filtered);
   const leakageUsers = buildHighRiskLeakage(filtered);
+  const accessStartedUsers = userSet(filtered, 'access_intake_started').size || userSet(filtered, 'screening_started').size;
+  const accessCompletedUsers = userSet(filtered, 'access_flow_completed').size;
   const interventionStartedUsers = userSet(filtered, 'intervention_started').size;
   const interventionCompletedUsers = userSet(filtered, 'intervention_completed').size;
   const referralStartedUsers = userSet(filtered, 'referral_started').size;
@@ -281,6 +398,11 @@ export function buildAnalyticsOverview(
     totalUsers: userSet(filtered).size,
     activeUsers: userSet(filtered).size,
     dailyActiveUsers: buildTrend(filtered, filter).slice(-1)[0]?.activeUsers ?? 0,
+    accessStarts: accessStartedUsers,
+    accessCompleted: accessCompletedUsers,
+    accessCompletionRate: conversionRate(accessCompletedUsers, accessStartedUsers),
+    accessDropOffCount: Math.max(accessStartedUsers - userSet(filtered, 'care_pathway_determined').size, 0),
+    avgMinutesToEndpoint: buildMinutesToEndpoint(filtered),
     interventionUptakeRate: conversionRate(interventionStartedUsers, screeningCompletedUsers),
     interventionCompletionRate: conversionRate(
       interventionCompletedUsers,
@@ -291,7 +413,11 @@ export function buildAnalyticsOverview(
     avgHoursToReferral: buildTimeToEvent(filtered, 'escalation_recommended', 'referral_completed'),
     highRiskLeakageCount: leakageUsers.length,
     tierDistribution: tiers,
+    endpointDistribution: buildEndpointDistribution(
+      filtered.filter((event) => event.eventName === 'care_pathway_determined' || event.eventName === 'access_flow_completed'),
+    ),
     funnel,
+    accessFunnel,
     trend: buildTrend(filtered, filter),
     highRiskLeakageUsers: leakageUsers,
     recentEvents: filtered
@@ -302,6 +428,7 @@ export function buildAnalyticsOverview(
         eventName: event.eventName,
         occurredAt: event.occurredAt,
         tier: normalizeTier(event) === 'unknown' ? null : (normalizeTier(event) as Tier),
+        accessEndpoint: event.accessEndpoint ?? null,
         interventionType: event.interventionType ?? null,
         referralDestination: event.referralDestination ?? null,
         userId: event.userId,

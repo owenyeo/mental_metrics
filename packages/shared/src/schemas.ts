@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { EVENT_NAMES, TIERS } from './events';
+import { ACCESS_ENDPOINTS, EVENT_NAMES, TIERS } from './events';
 
 const scalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
@@ -9,11 +9,14 @@ const jsonValueSchema: z.ZodTypeAny = z.lazy(() =>
 );
 
 export const tierSchema = z.enum(TIERS);
+export const accessEndpointSchema = z.enum(ACCESS_ENDPOINTS);
 export const eventNameSchema = z.enum(EVENT_NAMES);
 
 export const eventPropertiesSchema = z
   .object({
     tier: tierSchema.optional(),
+    access_endpoint: accessEndpointSchema.optional(),
+    intake_step: z.string().min(1).max(80).optional(),
     intervention_type: z.string().min(1).max(120).optional(),
     distress_score: z.number().min(0).max(10).optional(),
     referral_destination: z.string().min(1).max(120).optional(),

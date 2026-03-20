@@ -5,6 +5,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DashboardView } from '../components/dashboard-view';
 
+function mockJsonResponse(payload: unknown): Response {
+  return {
+    ok: true,
+    headers: {
+      get: () => 'application/json',
+    },
+    text: async () => JSON.stringify(payload),
+  } as Response;
+}
+
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   BarChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -22,6 +32,11 @@ const overview: AnalyticsOverview = {
   totalUsers: 12,
   activeUsers: 8,
   dailyActiveUsers: 5,
+  accessStarts: 10,
+  accessCompleted: 7,
+  accessCompletionRate: 70,
+  accessDropOffCount: 3,
+  avgMinutesToEndpoint: 4.5,
   interventionUptakeRate: 66.7,
   interventionCompletionRate: 60,
   referralCompletionRate: 50,
@@ -34,18 +49,49 @@ const overview: AnalyticsOverview = {
     unwell: 4,
     unknown: 0,
   },
+  endpointDistribution: {
+    self_help: 3,
+    peer_support: 4,
+    medical_referral: 2,
+    crisis_support: 1,
+    unknown: 0,
+  },
   funnel: [
     { step: 'screening_started', users: 12, conversionRate: 100 },
     { step: 'screening_completed', users: 10, conversionRate: 83.3 },
   ],
+  accessFunnel: [
+    { step: 'access_intake_started', users: 10, conversionRate: 100 },
+    { step: 'screening_completed', users: 9, conversionRate: 90 },
+  ],
   trend: [
-    { date: '2026-03-01', activeUsers: 3, interventionsStarted: 1, referralsCompleted: 0 },
+    {
+      date: '2026-03-01',
+      activeUsers: 3,
+      interventionsStarted: 1,
+      referralsCompleted: 0,
+      accessCompletions: 2,
+    },
   ],
   highRiskLeakageUsers: [
-    { userId: 'user-1', tier: 'unwell', latestSignalAt: '2026-03-01T01:00:00.000Z', signalReason: 'crisis_button_clicked' },
+    {
+      userId: 'user-1',
+      tier: 'unwell',
+      latestSignalAt: '2026-03-01T01:00:00.000Z',
+      signalReason: 'crisis_button_clicked',
+    },
   ],
   recentEvents: [
-    { id: '1', eventName: 'screening_completed', occurredAt: '2026-03-01T01:00:00.000Z', tier: 'distressed', interventionType: null, referralDestination: null, userId: 'user-2' },
+    {
+      id: '1',
+      eventName: 'care_pathway_determined',
+      occurredAt: '2026-03-01T01:00:00.000Z',
+      tier: 'distressed',
+      accessEndpoint: 'peer_support',
+      interventionType: null,
+      referralDestination: null,
+      userId: 'user-2',
+    },
   ],
 };
 
@@ -60,10 +106,10 @@ describe('DashboardView', () => {
       vi.fn(async (input: string | URL | Request) => {
         const url = String(input);
         if (url.includes('/interventions')) {
-          return { ok: true, json: async () => ({ items: interventions }) } as Response;
+          return mockJsonResponse({ items: interventions });
         }
 
-        return { ok: true, json: async () => overview } as Response;
+        return mockJsonResponse(overview);
       }),
     );
   });
@@ -79,7 +125,7 @@ describe('DashboardView', () => {
     );
 
     expect(screen.getByTestId('kpi-total-users')).toHaveTextContent('12');
-    expect(screen.getByTestId('funnel-chart')).toHaveTextContent('screening_completed');
+    expect(screen.getByTestId('funnel-chart')).toHaveTextContent('access_intake_started');
     expect(screen.getByTestId('intervention-table')).toHaveTextContent('guided_breathing');
     expect(screen.getByTestId('leakage-panel')).toHaveTextContent('crisis_button_clicked');
   });

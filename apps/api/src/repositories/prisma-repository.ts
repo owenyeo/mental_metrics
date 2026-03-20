@@ -11,6 +11,7 @@ interface PrismaAnalyticsEvent {
   eventName: string;
   occurredAt: Date;
   tier: string | null;
+  properties: Record<string, unknown> | null;
   interventionType: string | null;
   referralDestination: string | null;
   distressScore: number | null;
@@ -123,9 +124,11 @@ export class PrismaEventRepository implements EventRepository {
       occurredAt: event.occurredAt.toISOString(),
       eventName: event.eventName as AnalyticsEventRecord['eventName'],
       tier: event.tier as AnalyticsEventRecord['tier'],
+      accessEndpoint: (event.properties?.access_endpoint as AnalyticsEventRecord['accessEndpoint']) ?? null,
       interventionType: event.interventionType,
       referralDestination: event.referralDestination,
       distressScore: event.distressScore,
+      intakeStep: (event.properties?.intake_step as string | null) ?? null,
     }));
   }
 }

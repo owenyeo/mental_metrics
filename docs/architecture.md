@@ -38,8 +38,12 @@ This MVP is a service intelligence layer for existing youth mental health servic
 Required tracked events:
 
 - `landing_viewed`
+- `access_intake_started`
+- `access_step_completed`
 - `screening_started`
 - `screening_completed`
+- `care_pathway_determined`
+- `access_flow_completed`
 - `intervention_viewed`
 - `intervention_started`
 - `intervention_completed`
@@ -70,3 +74,4 @@ Required tracked events:
 - Analytics are computed on-demand for the MVP rather than via a separate warehouse job.
 - Rate limiting and API-key project auth are implemented, but advanced tenant isolation and consent workflows are documented rather than fully productized.
 - The schema allows richer event storage through JSON properties while indexing the key dimensions used by the dashboard.
+- Access analytics are modeled as explicit events so providers can measure whether a user reaches a concrete endpoint such as self-help, peer support, referral, or urgent support.

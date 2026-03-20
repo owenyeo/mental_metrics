@@ -11,36 +11,46 @@ describe('DemoFlow', () => {
       vi.fn().mockResolvedValue({
         ok: true,
         status: 202,
-        json: async () => ({ accepted: ['event-1'] }),
       }),
     );
   });
 
-  it('walks through identification and screening actions', async () => {
+  it('routes a user to an endpoint after the intake steps', async () => {
     render(<DemoFlow />);
 
-    fireEvent.click(screen.getByText('Identify demo user'));
-    fireEvent.change(screen.getByLabelText('Distress score'), {
-      target: { value: '8' },
-    });
-    fireEvent.click(screen.getByText('Complete screening'));
-
-    await waitFor(() =>
-      expect(screen.getByTestId('demo-status')).toHaveTextContent(
-        'Screening completed. Tier result: unwell.',
-      ),
-    );
-  });
-
-  it('supports referral completion flow', async () => {
-    render(<DemoFlow />);
-
-    fireEvent.click(screen.getByText('Start referral'));
-    fireEvent.click(screen.getByText('Complete referral'));
+    fireEvent.click(screen.getByText('Find support now'));
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.change(screen.getByRole('slider'), { target: { value: '8' } });
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByLabelText('Move toward professional support or referral'));
+    fireEvent.click(screen.getByText('See my support route'));
 
     await waitFor(() => {
       expect(screen.getByTestId('demo-status')).toHaveTextContent(
-        'Referral completed and appointment booked.',
+        'Endpoint determined: medical_referral.',
+      );
+    });
+  });
+
+  it('completes the self-help endpoint action', async () => {
+    render(<DemoFlow />);
+
+    fireEvent.click(screen.getByText('Find support now'));
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.change(screen.getByRole('slider'), { target: { value: '2' } });
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByLabelText('Start with self-help tools and resources'));
+    fireEvent.click(screen.getByText('See my support route'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Open self-help plan')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Open self-help plan'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('demo-status')).toHaveTextContent(
+        'Primary endpoint action completed: self_help.',
       );
     });
   });

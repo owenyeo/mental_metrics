@@ -16,6 +16,12 @@ const filter: DateRangeFilter = {
 
 const events: AnalyticsEventRecord[] = [
   {
+    id: '0',
+    userId: 'user-1',
+    eventName: 'access_intake_started',
+    occurredAt: '2026-03-01T00:30:00.000Z',
+  },
+  {
     id: '1',
     userId: 'user-1',
     eventName: 'screening_started',
@@ -48,6 +54,20 @@ const events: AnalyticsEventRecord[] = [
   {
     id: '5',
     userId: 'user-2',
+    eventName: 'access_intake_started',
+    occurredAt: '2026-03-02T01:00:00.000Z',
+  },
+  {
+    id: '5b',
+    userId: 'user-2',
+    eventName: 'care_pathway_determined',
+    occurredAt: '2026-03-02T02:30:00.000Z',
+    accessEndpoint: 'crisis_support',
+    tier: 'unwell',
+  },
+  {
+    id: '5c',
+    userId: 'user-2',
     eventName: 'screening_completed',
     occurredAt: '2026-03-02T02:00:00.000Z',
     distressScore: 8,
@@ -62,6 +82,20 @@ const events: AnalyticsEventRecord[] = [
   },
   {
     id: '7',
+    userId: 'user-3',
+    eventName: 'access_intake_started',
+    occurredAt: '2026-03-03T01:00:00.000Z',
+  },
+  {
+    id: '7b',
+    userId: 'user-3',
+    eventName: 'care_pathway_determined',
+    occurredAt: '2026-03-03T02:15:00.000Z',
+    accessEndpoint: 'medical_referral',
+    tier: 'distressed',
+  },
+  {
+    id: '7c',
     userId: 'user-3',
     eventName: 'screening_completed',
     occurredAt: '2026-03-03T02:00:00.000Z',
@@ -80,6 +114,14 @@ const events: AnalyticsEventRecord[] = [
     userId: 'user-3',
     eventName: 'referral_completed',
     occurredAt: '2026-03-05T02:00:00.000Z',
+    tier: 'distressed',
+  },
+  {
+    id: '10',
+    userId: 'user-3',
+    eventName: 'access_flow_completed',
+    occurredAt: '2026-03-05T02:05:00.000Z',
+    accessEndpoint: 'medical_referral',
     tier: 'distressed',
   },
 ];
@@ -121,6 +163,9 @@ describe('analytics helpers', () => {
   it('builds the overview summary', () => {
     const overview = buildAnalyticsOverview(events, filter);
     expect(overview.totalUsers).toBe(3);
+    expect(overview.accessStarts).toBe(3);
+    expect(overview.accessCompleted).toBe(1);
+    expect(overview.endpointDistribution.medical_referral).toBe(1);
     expect(overview.interventionUptakeRate).toBeCloseTo(33.3, 1);
     expect(overview.referralCompletionRate).toBe(100);
     expect(overview.avgHoursToIntervention).toBe(3);

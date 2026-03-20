@@ -19,6 +19,7 @@ Query parameters:
 - `tier`
 
 Returns overview KPIs, funnel conversion, trend data, leakage metrics, and recent activity.
+Also includes access-specific metrics such as intake starts, access completion rate, endpoint distribution, average minutes to endpoint, and access drop-off count.
 
 ### `GET /v1/analytics/interventions`
 

@@ -8,12 +8,12 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
-  LineChart,
-  Line,
 } from 'recharts';
 
 const TIER_OPTIONS: Array<Tier | 'all'> = ['all', 'at_risk', 'distressed', 'unwell'];
@@ -102,9 +102,7 @@ export function DashboardView({
         setInterventions(interventionPayload.items);
       } catch (error) {
         setLoadError(
-          error instanceof Error
-            ? error.message
-            : 'Unable to refresh analytics right now.',
+          error instanceof Error ? error.message : 'Unable to refresh analytics right now.',
         );
       }
     }
@@ -113,12 +111,12 @@ export function DashboardView({
   }, [apiBaseUrl, projectKey, tier]);
 
   const tierBreakdown = useMemo(
-    () =>
-      Object.entries(overview.tierDistribution).map(([name, value]) => ({
-        name,
-        value,
-      })),
+    () => Object.entries(overview.tierDistribution).map(([name, value]) => ({ name, value })),
     [overview.tierDistribution],
+  );
+  const endpointBreakdown = useMemo(
+    () => Object.entries(overview.endpointDistribution).map(([name, value]) => ({ name, value })),
+    [overview.endpointDistribution],
   );
 
   return (
@@ -128,10 +126,10 @@ export function DashboardView({
           <p className="mb-2 text-sm uppercase tracking-[0.3em] text-slate-500">
             Service Intelligence Layer
           </p>
-          <h1 className="text-4xl font-semibold text-ink">Provider Operations Dashboard</h1>
+          <h1 className="text-4xl font-semibold text-ink">Access And Operations Dashboard</h1>
           <p className="mt-2 max-w-2xl text-slate-600">
-            Track meaningful engagement, intervention uptake, escalation-to-care, and high-risk
-            missed-help signals across your service funnel.
+            Measure whether young people reach a concrete support endpoint, where they are routed,
+            and where access breaks down before support is reached.
           </p>
         </div>
 
@@ -164,36 +162,34 @@ export function DashboardView({
           <p className="mt-3 text-3xl font-semibold">{overview.totalUsers}</p>
         </article>
         <article className={cardStyle}>
-          <p className="text-sm text-slate-500">Active users</p>
-          <p className="mt-3 text-3xl font-semibold">{overview.activeUsers}</p>
+          <p className="text-sm text-slate-500">Access starts</p>
+          <p className="mt-3 text-3xl font-semibold">{overview.accessStarts}</p>
         </article>
         <article className={cardStyle}>
-          <p className="text-sm text-slate-500">Intervention uptake</p>
+          <p className="text-sm text-slate-500">Access completion rate</p>
           <p className="mt-3 text-3xl font-semibold">
-            {formatPercent(overview.interventionUptakeRate)}
+            {formatPercent(overview.accessCompletionRate)}
           </p>
         </article>
         <article className={cardStyle}>
-          <p className="text-sm text-slate-500">High-risk leakage</p>
-          <p className="mt-3 text-3xl font-semibold">{overview.highRiskLeakageCount}</p>
+          <p className="text-sm text-slate-500">Access drop-off</p>
+          <p className="mt-3 text-3xl font-semibold">{overview.accessDropOffCount}</p>
         </article>
       </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+      <section className="mt-6 grid gap-6 xl:grid-cols-[1.45fr_1fr]">
         <article className={cardStyle}>
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-ink">Journey Funnel</h2>
-              <p className="text-sm text-slate-500">Key transitions across the help pathway.</p>
-            </div>
-          </div>
+          <h2 className="text-xl font-semibold text-ink">Access Funnel</h2>
+          <p className="mb-4 text-sm text-slate-500">
+            Progress from intake start to a determined support endpoint.
+          </p>
           <div className="space-y-4" data-testid="funnel-chart">
-            {overview.funnel.map((step) => (
+            {overview.accessFunnel.map((step) => (
               <div key={step.step}>
                 <div className="mb-1 flex justify-between text-sm">
                   <span>{step.step}</span>
                   <span>
-                    {step.users} users · {formatPercent(step.conversionRate)}
+                    {step.users} users | {formatPercent(step.conversionRate)}
                   </span>
                 </div>
                 <div className="h-3 rounded-full bg-slate-100">
@@ -205,12 +201,115 @@ export function DashboardView({
               </div>
             ))}
           </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Avg minutes to endpoint</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">
+                {overview.avgMinutesToEndpoint ?? 'N/A'}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Intervention uptake</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">
+                {formatPercent(overview.interventionUptakeRate)}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Referral completion</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">
+                {formatPercent(overview.referralCompletionRate)}
+              </p>
+            </div>
+          </div>
         </article>
 
         <article className={cardStyle}>
-          <h2 className="text-xl font-semibold text-ink">Tier Breakdown</h2>
-          <p className="mb-4 text-sm text-slate-500">Operational distribution of support needs.</p>
+          <h2 className="text-xl font-semibold text-ink">Endpoint Distribution</h2>
+          <p className="mb-4 text-sm text-slate-500">
+            Which endpoint the access flow is routing users toward.
+          </p>
           <div className="h-72" data-testid="tier-breakdown">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={endpointBreakdown}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="value" radius={[10, 10, 0, 0]}>
+                  {endpointBreakdown.map((entry) => (
+                    <Cell
+                      key={entry.name}
+                      fill={
+                        entry.name === 'crisis_support'
+                          ? '#ff7f50'
+                          : entry.name === 'medical_referral'
+                            ? '#f3c969'
+                            : entry.name === 'peer_support'
+                              ? '#7aa095'
+                              : '#b6c1ca'
+                      }
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </article>
+      </section>
+
+      <section className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]">
+        <article className={cardStyle}>
+          <h2 className="text-xl font-semibold text-ink">Trendline</h2>
+          <p className="mb-4 text-sm text-slate-500">
+            Daily active users, access completions, and completed referrals.
+          </p>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={overview.trend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Line type="monotone" dataKey="activeUsers" stroke="#14213d" strokeWidth={2} />
+                <Line type="monotone" dataKey="accessCompletions" stroke="#ff7f50" strokeWidth={2} />
+                <Line type="monotone" dataKey="referralsCompleted" stroke="#7aa095" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </article>
+
+        <article className={cardStyle}>
+          <h2 className="text-xl font-semibold text-ink">High-Risk Leakage</h2>
+          <p className="mb-4 text-sm text-slate-500">
+            High-risk users who still have no completed help action in the selected window.
+          </p>
+          <div className="space-y-3" data-testid="leakage-panel">
+            {overview.highRiskLeakageUsers.length === 0 ? (
+              <p className="rounded-2xl bg-sage/10 px-4 py-6 text-sm text-slate-600">
+                No unresolved high-risk leakage detected in this period.
+              </p>
+            ) : (
+              overview.highRiskLeakageUsers.map((user) => (
+                <div key={user.userId} className="rounded-2xl bg-rose-50 p-4">
+                  <p className="font-medium text-ink">{user.userId}</p>
+                  <p className="text-sm text-slate-600">
+                    {user.tier} | {user.signalReason}
+                  </p>
+                  <p className="text-xs text-slate-500">{user.latestSignalAt}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+      </section>
+
+      <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <article className={cardStyle}>
+          <h2 className="text-xl font-semibold text-ink">Tier Breakdown</h2>
+          <p className="mb-4 text-sm text-slate-500">
+            Operational distribution of support needs in the filtered window.
+          </p>
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={tierBreakdown}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -237,65 +336,7 @@ export function DashboardView({
             </ResponsiveContainer>
           </div>
         </article>
-      </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]">
-        <article className={cardStyle}>
-          <h2 className="text-xl font-semibold text-ink">Service Trends</h2>
-          <p className="mb-4 text-sm text-slate-500">
-            Daily active users, intervention starts, and completed referrals.
-          </p>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={overview.trend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Line type="monotone" dataKey="activeUsers" stroke="#14213d" strokeWidth={2} />
-                <Line
-                  type="monotone"
-                  dataKey="interventionsStarted"
-                  stroke="#ff7f50"
-                  strokeWidth={2}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="referralsCompleted"
-                  stroke="#7aa095"
-                  strokeWidth={2}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </article>
-
-        <article className={cardStyle}>
-          <h2 className="text-xl font-semibold text-ink">High-Risk Leakage</h2>
-          <p className="mb-4 text-sm text-slate-500">
-            Users with signals of need but no completed help action in the selected window.
-          </p>
-          <div className="space-y-3" data-testid="leakage-panel">
-            {overview.highRiskLeakageUsers.length === 0 ? (
-              <p className="rounded-2xl bg-sage/10 px-4 py-6 text-sm text-slate-600">
-                No unresolved high-risk leakage detected in this period.
-              </p>
-            ) : (
-              overview.highRiskLeakageUsers.map((user) => (
-                <div key={user.userId} className="rounded-2xl bg-rose-50 p-4">
-                  <p className="font-medium text-ink">{user.userId}</p>
-                  <p className="text-sm text-slate-600">
-                    {user.tier} · {user.signalReason}
-                  </p>
-                  <p className="text-xs text-slate-500">{user.latestSignalAt}</p>
-                </div>
-              ))
-            )}
-          </div>
-        </article>
-      </section>
-
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <article className={cardStyle}>
           <h2 className="text-xl font-semibold text-ink">Intervention Performance</h2>
           <p className="mb-4 text-sm text-slate-500">
@@ -326,18 +367,28 @@ export function DashboardView({
             </table>
           </div>
         </article>
+      </section>
 
+      <section className="mt-6">
         <article className={cardStyle}>
-          <h2 className="text-xl font-semibold text-ink">Recent Activity</h2>
-          <p className="mb-4 text-sm text-slate-500">
-            Last recorded service events for provider monitoring.
-          </p>
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-ink">Recent Activity</h2>
+              <p className="text-sm text-slate-500">
+                Last recorded access and service events for provider monitoring.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm">
+              <p className="text-slate-500">Active users</p>
+              <p className="font-semibold text-ink">{overview.activeUsers}</p>
+            </div>
+          </div>
           <div className="space-y-3" data-testid="recent-events">
             {overview.recentEvents.map((event) => (
               <div key={event.id} className="rounded-2xl bg-slate-50 p-4">
                 <p className="font-medium">{event.eventName}</p>
                 <p className="text-sm text-slate-500">
-                  {event.userId} · {event.tier ?? 'unknown'}
+                  {event.userId} | {event.accessEndpoint ?? event.tier ?? 'unknown'}
                 </p>
                 <p className="text-xs text-slate-400">{event.occurredAt}</p>
               </div>

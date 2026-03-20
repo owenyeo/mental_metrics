@@ -12,7 +12,12 @@ tracker.init({
 
 tracker.identify('anon_or_provider_user_id', { ageBand: '16-18' });
 tracker.page('home');
+tracker.track('access_intake_started', { intake_step: 'welcome' });
 tracker.track('screening_started', { source: 'homepage' });
+tracker.track('care_pathway_determined', {
+  access_endpoint: 'self_help',
+  tier: 'at_risk',
+});
 ```
 
 API surface:
