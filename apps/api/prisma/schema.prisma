@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ProviderProject {
+  id          String     @id @default(cuid())
+  name        String
+  projectKey  String     @unique
+  environment String     @default("demo")
+  createdAt   DateTime   @default(now())
+  identities  Identity[]
+  sessions    Session[]
+  events      Event[]
+}
+
+model Identity {
+  id             String    @id @default(cuid())
+  projectId      String
+  externalUserId String?
+  anonymousId    String
+  traits         Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  project        ProviderProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sessions       Session[]
+  events         Event[]
+
+  @@unique([projectId, anonymousId])
+  @@index([projectId, externalUserId])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  projectId  String
+  identityId String
+  sessionKey String
+  startedAt  DateTime @default(now())
+  project    ProviderProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  events     Event[]
+
+  @@unique([projectId, sessionKey])
+}
+
+model Event {
+  id                  String   @id @default(cuid())
+  projectId           String
+  identityId          String
+  sessionId           String?
+  messageId           String?
+  userKey             String
+  eventName           String
+  occurredAt          DateTime
+  tier                String?
+  interventionType    String?
+  distressScore       Int?
+  referralDestination String?
+  properties          Json?
+  createdAt           DateTime @default(now())
+  project             ProviderProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  identity            Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  session             Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, messageId])
+  @@index([projectId, occurredAt])
+  @@index([projectId, eventName, occurredAt])
+  @@index([projectId, tier, occurredAt])
+  @@index([projectId, userKey, occurredAt])
+}

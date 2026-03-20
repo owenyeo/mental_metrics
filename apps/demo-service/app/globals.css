@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-shell text-slate-900;
+  background-image:
+    radial-gradient(circle at top, rgba(245, 143, 124, 0.2), transparent 30%),
+    linear-gradient(180deg, #fff7ed 0%, #fef3e7 100%);
+}
