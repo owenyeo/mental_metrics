@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildAnalyticsOverview,
+  buildFunnel,
   buildHighRiskLeakage,
   buildInterventionPerformance,
   deriveTierFromDistressScore,
@@ -171,5 +172,31 @@ describe('analytics helpers', () => {
     expect(overview.avgHoursToIntervention).toBe(3);
     expect(overview.highRiskLeakageCount).toBe(1);
     expect(overview.funnel.find((step) => step.step === 'screening_completed')?.users).toBe(3);
+  });
+
+  it('caps stage conversion by prior-step cohort membership', () => {
+    const funnel = buildFunnel([
+      {
+        id: 'a',
+        userId: 'user-a',
+        eventName: 'screening_started',
+        occurredAt: '2026-03-01T01:00:00.000Z',
+      },
+      {
+        id: 'b',
+        userId: 'user-a',
+        eventName: 'screening_completed',
+        occurredAt: '2026-03-01T02:00:00.000Z',
+      },
+      {
+        id: 'c',
+        userId: 'user-b',
+        eventName: 'screening_completed',
+        occurredAt: '2026-03-01T03:00:00.000Z',
+      },
+    ]);
+
+    expect(funnel[0]).toMatchObject({ step: 'screening_started', users: 1, conversionRate: 100 });
+    expect(funnel[1]).toMatchObject({ step: 'screening_completed', users: 1, conversionRate: 100 });
   });
 });

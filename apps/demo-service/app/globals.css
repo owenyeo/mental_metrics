@@ -6,6 +6,7 @@ body {
   @apply text-slate-900;
   background-color: #eef5f3;
   font-family:
+    "Segoe UI Variable Display",
     "Aptos",
     "Segoe UI",
     "Helvetica Neue",
@@ -14,4 +15,8 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+a {
+  text-decoration: none;
 }

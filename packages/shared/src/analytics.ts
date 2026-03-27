@@ -34,6 +34,10 @@ function userSet(events: AnalyticsEventRecord[], eventName?: string): Set<string
   return new Set(selected.map((event) => event.userId));
 }
 
+function intersectUsers(left: Set<string>, right: Set<string>): Set<string> {
+  return new Set([...left].filter((userId) => right.has(userId)));
+}
+
 function conversionRate(numerator: number, denominator: number): number {
   if (!denominator) {
     return 0;
@@ -76,73 +80,109 @@ export function filterAnalyticsEvents(
 }
 
 export function buildFunnel(events: AnalyticsEventRecord[]): FunnelStep[] {
-  const startedScreening = userSet(events, 'screening_started').size;
-  const completedScreening = userSet(events, 'screening_completed').size;
-  const startedIntervention = userSet(events, 'intervention_started').size;
-  const completedIntervention = userSet(events, 'intervention_completed').size;
-  const startedReferral = userSet(events, 'referral_started').size;
-  const completedReferral = userSet(events, 'referral_completed').size;
+  const screeningStartedUsers = userSet(events, 'screening_started');
+  const screeningCompletedUsers = intersectUsers(
+    screeningStartedUsers,
+    userSet(events, 'screening_completed'),
+  );
+  const interventionStartedUsers = intersectUsers(
+    screeningCompletedUsers,
+    userSet(events, 'intervention_started'),
+  );
+  const interventionCompletedUsers = intersectUsers(
+    interventionStartedUsers,
+    userSet(events, 'intervention_completed'),
+  );
+  const referralStartedUsers = intersectUsers(
+    screeningCompletedUsers,
+    userSet(events, 'referral_started'),
+  );
+  const referralCompletedUsers = intersectUsers(
+    referralStartedUsers,
+    userSet(events, 'referral_completed'),
+  );
 
   return [
     {
       step: 'screening_started',
-      users: startedScreening,
+      users: screeningStartedUsers.size,
       conversionRate: 100,
     },
     {
       step: 'screening_completed',
-      users: completedScreening,
-      conversionRate: conversionRate(completedScreening, startedScreening),
+      users: screeningCompletedUsers.size,
+      conversionRate: conversionRate(screeningCompletedUsers.size, screeningStartedUsers.size),
     },
     {
       step: 'intervention_started',
-      users: startedIntervention,
-      conversionRate: conversionRate(startedIntervention, completedScreening),
+      users: interventionStartedUsers.size,
+      conversionRate: conversionRate(interventionStartedUsers.size, screeningCompletedUsers.size),
     },
     {
       step: 'intervention_completed',
-      users: completedIntervention,
-      conversionRate: conversionRate(completedIntervention, startedIntervention),
+      users: interventionCompletedUsers.size,
+      conversionRate: conversionRate(
+        interventionCompletedUsers.size,
+        interventionStartedUsers.size,
+      ),
     },
     {
       step: 'referral_started',
-      users: startedReferral,
-      conversionRate: conversionRate(startedReferral, startedIntervention || completedScreening),
+      users: referralStartedUsers.size,
+      conversionRate: conversionRate(referralStartedUsers.size, screeningCompletedUsers.size),
     },
     {
       step: 'referral_completed',
-      users: completedReferral,
-      conversionRate: conversionRate(completedReferral, startedReferral),
+      users: referralCompletedUsers.size,
+      conversionRate: conversionRate(referralCompletedUsers.size, referralStartedUsers.size),
     },
   ];
 }
 
 export function buildAccessFunnel(events: AnalyticsEventRecord[]): FunnelStep[] {
-  const intakeStarted = userSet(events, 'access_intake_started').size || userSet(events, 'screening_started').size;
-  const screeningCompleted = userSet(events, 'screening_completed').size;
-  const pathwayDeterminations = userSet(events, 'care_pathway_determined').size;
-  const accessCompleted = userSet(events, 'access_flow_completed').size;
+  const intakeStartedUsers = userSet(events, 'access_intake_started');
+  const fallbackScreeningStartedUsers = userSet(events, 'screening_started');
+  const effectiveIntakeUsers =
+    intakeStartedUsers.size > 0 ? intakeStartedUsers : fallbackScreeningStartedUsers;
+  const screeningCompletedUsers = intersectUsers(
+    effectiveIntakeUsers,
+    userSet(events, 'screening_completed'),
+  );
+  const pathwayDeterminationUsers = intersectUsers(
+    screeningCompletedUsers.size > 0 ? screeningCompletedUsers : effectiveIntakeUsers,
+    userSet(events, 'care_pathway_determined'),
+  );
+  const accessCompletedUsers = intersectUsers(
+    pathwayDeterminationUsers.size > 0 ? pathwayDeterminationUsers : screeningCompletedUsers,
+    userSet(events, 'access_flow_completed'),
+  );
 
   return [
     {
       step: 'access_intake_started',
-      users: intakeStarted,
+      users: effectiveIntakeUsers.size,
       conversionRate: 100,
     },
     {
       step: 'screening_completed',
-      users: screeningCompleted,
-      conversionRate: conversionRate(screeningCompleted, intakeStarted),
+      users: screeningCompletedUsers.size,
+      conversionRate: conversionRate(screeningCompletedUsers.size, effectiveIntakeUsers.size),
     },
     {
       step: 'care_pathway_determined',
-      users: pathwayDeterminations,
-      conversionRate: conversionRate(pathwayDeterminations, screeningCompleted || intakeStarted),
+      users: pathwayDeterminationUsers.size,
+      conversionRate: conversionRate(
+        pathwayDeterminationUsers.size,
+        screeningCompletedUsers.size || effectiveIntakeUsers.size,
+      ),
     },
     {
       step: 'access_flow_completed',
-      users: accessCompleted,
-      conversionRate: conversionRate(accessCompleted, pathwayDeterminations || screeningCompleted),
+      users: accessCompletedUsers.size,
+      conversionRate: conversionRate(
+        accessCompletedUsers.size,
+        pathwayDeterminationUsers.size || screeningCompletedUsers.size,
+      ),
     },
   ];
 }

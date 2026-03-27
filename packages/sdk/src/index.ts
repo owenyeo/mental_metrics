@@ -1,4 +1,3 @@
-import { eventNameSchema } from '@sil/shared';
 import type { EventName, EventProperties, IdentifyTraits, TrackerConfig } from '@sil/shared';
 
 interface TrackerState {
@@ -146,7 +145,6 @@ export function createTracker() {
     },
 
     async track(eventName: EventName, properties?: EventProperties) {
-      eventNameSchema.parse(eventName);
       state.queue.push({
         messageId: generateMessageId(),
         eventName,

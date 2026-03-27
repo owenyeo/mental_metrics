@@ -1,5 +1,5 @@
-import { DemoFlow } from '../components/demo-flow';
+import { HomepageContent } from '../components/homepage-content';
 
 export default function Page() {
-  return <DemoFlow />;
+  return <HomepageContent />;
 }
