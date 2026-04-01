@@ -15,6 +15,8 @@ import {
   ensureDemoVisitor,
   getCurrentDemoUserId,
   getDemoYearOfBirth,
+  setDemoYearOfBirth,
+  trackLandingVisit,
   trackAndFlush,
   trackPage,
   trackPathwayDetermination,
@@ -22,7 +24,7 @@ import {
 } from './demo-tracker';
 import { SiteShell } from './site-shell';
 
-const steps = ['intro', 'age', 'distress', 'preference', 'recommendation'] as const;
+const steps = ['intro', 'demographic', 'age', 'distress', 'preference', 'recommendation'] as const;
 
 export function QuestionnaireContent() {
   const [answers, setAnswers] = useState<QuestionnaireAnswers>(defaultQuestionnaireAnswers);
@@ -30,11 +32,17 @@ export function QuestionnaireContent() {
   const [status, setStatus] = useState('Start when you are ready. We will guide one step at a time.');
   const [started, setStarted] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [yearOfBirth, setYearOfBirth] = useState<number | ''>('');
+  const yearOptions = Array.from(
+    { length: 35 },
+    (_, index) => new Date().getUTCFullYear() - 12 - index,
+  );
 
   useEffect(() => {
     const startTime = Date.now();
     const userId = ensureDemoVisitor();
     setCurrentUserId(userId ?? getCurrentDemoUserId());
+    setYearOfBirth(getDemoYearOfBirth() ?? '');
     void trackPage('screening_page', 'questionnaire');
 
     return () => {
@@ -50,11 +58,9 @@ export function QuestionnaireContent() {
   const activeStep = steps[currentStep];
 
   async function startQuestionnaire() {
-    const userId = await beginDemoJourney('questionnaire');
     setStarted(true);
-    setCurrentUserId(userId);
     setCurrentStep(1);
-    setStatus(`Questionnaire started for ${userId}.`);
+    setStatus('Questionnaire started. We will first ask for year of birth for anonymous reach tracking.');
   }
 
   async function goNext() {
@@ -63,12 +69,31 @@ export function QuestionnaireContent() {
       return;
     }
 
+    if (activeStep === 'demographic') {
+      const parsedYearOfBirth = yearOfBirth === '' ? null : yearOfBirth;
+
+      if (parsedYearOfBirth) {
+        setDemoYearOfBirth(parsedYearOfBirth);
+      }
+
+      const visitorId = await trackLandingVisit({
+        source: 'questionnaire_demographic_capture',
+        page: 'screening_page',
+        yearOfBirth: parsedYearOfBirth,
+      });
+      const journeyUserId = await beginDemoJourney('questionnaire');
+      setCurrentUserId(journeyUserId || visitorId);
+      setCurrentStep(2);
+      setStatus(`Questionnaire started for ${journeyUserId || visitorId}.`);
+      return;
+    }
+
     if (activeStep === 'age') {
       await trackAndFlush('access_step_completed', {
         intake_step: 'age_band',
         source: answers.ageBand,
       });
-      setCurrentStep(2);
+      setCurrentStep(3);
       return;
     }
 
@@ -78,7 +103,7 @@ export function QuestionnaireContent() {
         distress_score: answers.distressScore,
         tier: recommendation.tier,
       });
-      setCurrentStep(3);
+      setCurrentStep(4);
       return;
     }
 
@@ -93,7 +118,7 @@ export function QuestionnaireContent() {
         distressScore: answers.distressScore,
         source: 'questionnaire',
       });
-      setCurrentStep(4);
+      setCurrentStep(5);
       setStatus(`Recommended pathway: ${recommendation.label}.`);
     }
   }
@@ -144,8 +169,8 @@ export function QuestionnaireContent() {
           {currentStep === 0 ? (
             <div className="mt-8 rounded-[1.75rem] bg-slate-50 p-6">
               <p className="text-base leading-8 text-slate-700">
-                We will ask about age band, how intense things feel today, and what kind of support
-                is most manageable right now.
+                We will ask about year of birth, age band, how intense things feel today, and what
+                kind of support is most manageable right now.
               </p>
               <button
                 type="button"
@@ -154,6 +179,35 @@ export function QuestionnaireContent() {
               >
                 Start questionnaire
               </button>
+            </div>
+          ) : null}
+
+          {activeStep === 'demographic' ? (
+            <div className="mt-8">
+              <label className="block">
+                <span className="text-sm font-medium text-slate-700">
+                  Year of birth for anonymous reach tracking
+                </span>
+                <select
+                  aria-label="Questionnaire year of birth"
+                  value={yearOfBirth}
+                  onChange={(event) =>
+                    setYearOfBirth(event.target.value ? Number(event.target.value) : '')
+                  }
+                  className="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                >
+                  <option value="">Prefer not to say</option>
+                  {yearOptions.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="mt-3 text-sm leading-7 text-slate-500">
+                This helps providers understand whether the service is reaching the intended age
+                group. Your journey stays pseudonymous.
+              </p>
             </div>
           ) : null}
 
@@ -251,7 +305,7 @@ export function QuestionnaireContent() {
             </div>
           ) : null}
 
-          {currentStep > 0 && currentStep < 4 ? (
+          {currentStep > 0 && currentStep < 5 ? (
             <button
               type="button"
               onClick={() => void goNext()}
@@ -265,7 +319,7 @@ export function QuestionnaireContent() {
         <aside className="space-y-6">
           <section className="rounded-[2rem] border border-emerald-100 bg-white/92 p-7 shadow-[0_25px_60px_rgba(31,59,77,0.08)]">
             <p className="text-sm uppercase tracking-[0.25em] text-emerald-700">Recommendation</p>
-            {currentStep === 4 ? (
+            {currentStep === 5 ? (
               <>
                 <h2 className="mt-3 text-2xl font-semibold text-slate-900">{recommendation.title}</h2>
                 <p className="mt-3 text-sm font-medium text-emerald-800">{recommendation.summary}</p>

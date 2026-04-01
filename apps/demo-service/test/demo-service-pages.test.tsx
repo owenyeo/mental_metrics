@@ -56,6 +56,15 @@ describe('demo service pages', () => {
       expect(screen.getByText('Next')).toBeInTheDocument();
     });
 
+    fireEvent.change(screen.getByLabelText('Questionnaire year of birth'), {
+      target: { value: '2007' },
+    });
+    fireEvent.click(screen.getByText('Next'));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Which age group fits best?')).toBeInTheDocument();
+    });
+
     fireEvent.click(screen.getByText('Next'));
 
     await waitFor(() => {
