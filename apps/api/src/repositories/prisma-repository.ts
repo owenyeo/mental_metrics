@@ -18,6 +18,7 @@ interface PrismaAnalyticsEvent {
   identity: {
     externalUserId: string | null;
     anonymousId: string;
+    traits: Record<string, unknown> | null;
   };
 }
 
@@ -129,6 +130,11 @@ export class PrismaEventRepository implements EventRepository {
       referralDestination: event.referralDestination,
       distressScore: event.distressScore,
       intakeStep: (event.properties?.intake_step as string | null) ?? null,
+      page: (event.properties?.page as string | null) ?? null,
+      sessionLengthSec: (event.properties?.session_length_sec as number | null) ?? null,
+      yearOfBirth:
+        (event.properties?.year_of_birth as number | null) ??
+        ((event.identity.traits?.yearOfBirth as number | null) ?? null),
     }));
   }
 }

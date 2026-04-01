@@ -37,6 +37,22 @@ function formatPercent(value: number) {
   return `${value.toFixed(1)}%`;
 }
 
+function formatSeconds(value: number | null) {
+  if (value === null) {
+    return 'N/A';
+  }
+
+  if (value >= 60) {
+    return `${(value / 60).toFixed(1)} min`;
+  }
+
+  return `${value.toFixed(1)} sec`;
+}
+
+function prettifyStep(step: string) {
+  return step.replaceAll('_', ' ');
+}
+
 export function DashboardView({
   initialOverview,
   initialInterventions,
@@ -118,6 +134,14 @@ export function DashboardView({
     () => Object.entries(overview.endpointDistribution).map(([name, value]) => ({ name, value })),
     [overview.endpointDistribution],
   );
+  const sectionTimeData = useMemo(
+    () =>
+      overview.sectionTimes.map((section) => ({
+        ...section,
+        label: prettifyStep(section.section),
+      })),
+    [overview.sectionTimes],
+  );
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-6 py-10">
@@ -126,10 +150,11 @@ export function DashboardView({
           <p className="mb-2 text-sm uppercase tracking-[0.3em] text-slate-500">
             Service Intelligence Layer
           </p>
-          <h1 className="text-4xl font-semibold text-ink">Access And Operations Dashboard</h1>
-          <p className="mt-2 max-w-2xl text-slate-600">
-            Measure whether young people reach a concrete support endpoint, where they are routed,
-            and where access breaks down before support is reached.
+          <h1 className="text-4xl font-semibold text-ink">Reach And Accessibility Dashboard</h1>
+          <p className="mt-2 max-w-3xl text-slate-600">
+            Track who the service is reaching, whether visitors start using support, where they
+            drop out of the flow, and whether any section of the experience appears confusing or
+            overloaded.
           </p>
         </div>
 
@@ -158,77 +183,163 @@ export function DashboardView({
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <article className={cardStyle} data-testid="kpi-total-users">
-          <p className="text-sm text-slate-500">Total users</p>
-          <p className="mt-3 text-3xl font-semibold">{overview.totalUsers}</p>
+          <p className="text-sm text-slate-500">Total visitors</p>
+          <p className="mt-3 text-3xl font-semibold">{overview.totalVisitors}</p>
+          <p className="mt-2 text-sm text-slate-500">Tracked visitors entering the platform</p>
         </article>
         <article className={cardStyle}>
-          <p className="text-sm text-slate-500">Access starts</p>
-          <p className="mt-3 text-3xl font-semibold">{overview.accessStarts}</p>
+          <p className="text-sm text-slate-500">Demographic capture</p>
+          <p className="mt-3 text-3xl font-semibold">
+            {formatPercent(overview.demographicCoverageRate)}
+          </p>
+          <p className="mt-2 text-sm text-slate-500">Visitors who provided year of birth</p>
+        </article>
+        <article className={cardStyle}>
+          <p className="text-sm text-slate-500">Target demographic reached</p>
+          <p className="mt-3 text-3xl font-semibold">
+            {formatPercent(overview.targetDemographicRate)}
+          </p>
+          <p className="mt-2 text-sm text-slate-500">
+            {overview.targetDemographicUsers} visitors aged 13-24
+          </p>
+        </article>
+        <article className={cardStyle}>
+          <p className="text-sm text-slate-500">Daily active users</p>
+          <p className="mt-3 text-3xl font-semibold">{overview.dailyActiveUsers}</p>
+          <p className="mt-2 text-sm text-slate-500">Most recent day in the selected window</p>
+        </article>
+      </section>
+
+      <section className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <article className={cardStyle}>
+          <p className="text-sm text-slate-500">Screening start rate</p>
+          <p className="mt-3 text-3xl font-semibold">
+            {formatPercent(overview.screeningStartRate)}
+          </p>
+          <p className="mt-2 text-sm text-slate-500">{overview.screeningStarts} visitors</p>
+        </article>
+        <article className={cardStyle}>
+          <p className="text-sm text-slate-500">Chatbot start rate</p>
+          <p className="mt-3 text-3xl font-semibold">
+            {formatPercent(overview.chatbotStartRate)}
+          </p>
+          <p className="mt-2 text-sm text-slate-500">{overview.chatbotStarts} visitors</p>
+        </article>
+        <article className={cardStyle}>
+          <p className="text-sm text-slate-500">Resource click rate</p>
+          <p className="mt-3 text-3xl font-semibold">
+            {formatPercent(overview.resourceClickRate)}
+          </p>
+          <p className="mt-2 text-sm text-slate-500">{overview.resourceClicks} visitors</p>
         </article>
         <article className={cardStyle}>
           <p className="text-sm text-slate-500">Access completion rate</p>
           <p className="mt-3 text-3xl font-semibold">
             {formatPercent(overview.accessCompletionRate)}
           </p>
-        </article>
-        <article className={cardStyle}>
-          <p className="text-sm text-slate-500">Access drop-off</p>
-          <p className="mt-3 text-3xl font-semibold">{overview.accessDropOffCount}</p>
+          <p className="mt-2 text-sm text-slate-500">{overview.accessCompleted} completed journeys</p>
         </article>
       </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1.45fr_1fr]">
+      <section className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]">
         <article className={cardStyle}>
-          <h2 className="text-xl font-semibold text-ink">Access Funnel</h2>
+          <h2 className="text-xl font-semibold text-ink">Reach And Activation Trend</h2>
           <p className="mb-4 text-sm text-slate-500">
-            Progress from intake start to a determined support endpoint.
+            Daily visitors, screening starts, and resource clicks.
+          </p>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={overview.trend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Line type="monotone" dataKey="visitors" stroke="#14213d" strokeWidth={2} />
+                <Line type="monotone" dataKey="screeningStarts" stroke="#ff7f50" strokeWidth={2} />
+                <Line type="monotone" dataKey="resourceClicks" stroke="#7aa095" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </article>
+
+        <article className={cardStyle}>
+          <h2 className="text-xl font-semibold text-ink">Funnel Drop-off</h2>
+          <p className="mb-4 text-sm text-slate-500">
+            Where accessibility may be breaking down between first visit and further help use.
           </p>
           <div className="space-y-4" data-testid="funnel-chart">
-            {overview.accessFunnel.map((step) => (
-              <div key={step.step}>
-                <div className="mb-1 flex justify-between text-sm">
-                  <span>{step.step}</span>
+            {overview.dropOffFunnel.map((step) => (
+              <div key={`${step.fromStep}-${step.toStep}`}>
+                <div className="mb-1 flex justify-between gap-4 text-sm">
                   <span>
-                    {step.users} users | {formatPercent(step.conversionRate)}
+                    {prettifyStep(step.fromStep)} to {prettifyStep(step.toStep)}
+                  </span>
+                  <span>
+                    {step.completedUsers}/{step.enteredUsers} | {formatPercent(step.dropOffRate)}{' '}
+                    drop-off
                   </span>
                 </div>
                 <div className="h-3 rounded-full bg-slate-100">
                   <div
                     className="h-3 rounded-full bg-coral transition-all"
-                    style={{ width: `${Math.max(step.conversionRate, 6)}%` }}
+                    style={{ width: `${Math.max(step.dropOffRate, 4)}%` }}
                   />
                 </div>
               </div>
             ))}
           </div>
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Avg minutes to endpoint</p>
-              <p className="mt-2 text-2xl font-semibold text-ink">
-                {overview.avgMinutesToEndpoint ?? 'N/A'}
-              </p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Intervention uptake</p>
-              <p className="mt-2 text-2xl font-semibold text-ink">
-                {formatPercent(overview.interventionUptakeRate)}
-              </p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Referral completion</p>
-              <p className="mt-2 text-2xl font-semibold text-ink">
-                {formatPercent(overview.referralCompletionRate)}
-              </p>
-            </div>
+        </article>
+      </section>
+
+      <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <article className={cardStyle}>
+          <h2 className="text-xl font-semibold text-ink">Time Spent Per Section</h2>
+          <p className="mb-4 text-sm text-slate-500">
+            Average dwell time recorded for landing, screening, and resource sections.
+          </p>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={sectionTimeData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" />
+                <YAxis allowDecimals />
+                <Tooltip />
+                <Bar dataKey="avgSeconds" radius={[10, 10, 0, 0]}>
+                  {sectionTimeData.map((entry) => (
+                    <Cell
+                      key={entry.section}
+                      fill={
+                        entry.section === 'landing_page'
+                          ? '#14213d'
+                          : entry.section === 'screening_page'
+                            ? '#ff7f50'
+                            : '#7aa095'
+                      }
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {sectionTimeData.map((entry) => (
+              <div key={entry.section} className="rounded-2xl bg-slate-50 p-4">
+                <p className="text-sm text-slate-500">{prettifyStep(entry.section)}</p>
+                <p className="mt-2 text-xl font-semibold text-ink">
+                  {formatSeconds(entry.avgSeconds)}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">{entry.sampleCount} samples</p>
+              </div>
+            ))}
           </div>
         </article>
 
         <article className={cardStyle}>
           <h2 className="text-xl font-semibold text-ink">Endpoint Distribution</h2>
           <p className="mb-4 text-sm text-slate-500">
-            Which endpoint the access flow is routing users toward.
+            Which help routes the service is steering visitors toward.
           </p>
-          <div className="h-72" data-testid="tier-breakdown">
+          <div className="h-80" data-testid="tier-breakdown">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={endpointBreakdown}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -253,52 +364,6 @@ export function DashboardView({
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        </article>
-      </section>
-
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]">
-        <article className={cardStyle}>
-          <h2 className="text-xl font-semibold text-ink">Trendline</h2>
-          <p className="mb-4 text-sm text-slate-500">
-            Daily active users, access completions, and completed referrals.
-          </p>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={overview.trend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Line type="monotone" dataKey="activeUsers" stroke="#14213d" strokeWidth={2} />
-                <Line type="monotone" dataKey="accessCompletions" stroke="#ff7f50" strokeWidth={2} />
-                <Line type="monotone" dataKey="referralsCompleted" stroke="#7aa095" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </article>
-
-        <article className={cardStyle}>
-          <h2 className="text-xl font-semibold text-ink">High-Risk Leakage</h2>
-          <p className="mb-4 text-sm text-slate-500">
-            High-risk users who still have no completed help action in the selected window.
-          </p>
-          <div className="space-y-3" data-testid="leakage-panel">
-            {overview.highRiskLeakageUsers.length === 0 ? (
-              <p className="rounded-2xl bg-sage/10 px-4 py-6 text-sm text-slate-600">
-                No unresolved high-risk leakage detected in this period.
-              </p>
-            ) : (
-              overview.highRiskLeakageUsers.map((user) => (
-                <div key={user.userId} className="rounded-2xl bg-rose-50 p-4">
-                  <p className="font-medium text-ink">{user.userId}</p>
-                  <p className="text-sm text-slate-600">
-                    {user.tier} | {user.signalReason}
-                  </p>
-                  <p className="text-xs text-slate-500">{user.latestSignalAt}</p>
-                </div>
-              ))
-            )}
           </div>
         </article>
       </section>
@@ -355,7 +420,10 @@ export function DashboardView({
               </thead>
               <tbody>
                 {interventions.map((row) => (
-                  <tr key={`${row.interventionType}-${row.tier}`} className="border-t border-slate-100">
+                  <tr
+                    key={`${row.interventionType}-${row.tier}`}
+                    className="border-t border-slate-100"
+                  >
                     <td className="py-3">{row.interventionType}</td>
                     <td className="py-3">{row.tier}</td>
                     <td className="py-3">{row.started}</td>
@@ -365,6 +433,61 @@ export function DashboardView({
                 ))}
               </tbody>
             </table>
+          </div>
+        </article>
+      </section>
+
+      <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <article className={cardStyle}>
+          <h2 className="text-xl font-semibold text-ink">High-Risk Leakage</h2>
+          <p className="mb-4 text-sm text-slate-500">
+            High-risk users who still have no completed help action in the selected window.
+          </p>
+          <div className="space-y-3" data-testid="leakage-panel">
+            {overview.highRiskLeakageUsers.length === 0 ? (
+              <p className="rounded-2xl bg-sage/10 px-4 py-6 text-sm text-slate-600">
+                No unresolved high-risk leakage detected in this period.
+              </p>
+            ) : (
+              overview.highRiskLeakageUsers.map((user) => (
+                <div key={user.userId} className="rounded-2xl bg-rose-50 p-4">
+                  <p className="font-medium text-ink">{user.userId}</p>
+                  <p className="text-sm text-slate-600">
+                    {user.tier} | {user.signalReason}
+                  </p>
+                  <p className="text-xs text-slate-500">{user.latestSignalAt}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+
+        <article className={cardStyle}>
+          <h2 className="text-xl font-semibold text-ink">Access Summary</h2>
+          <p className="mb-4 text-sm text-slate-500">
+            Supporting provider metrics for access progression and care escalation.
+          </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Access starts</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{overview.accessStarts}</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Access drop-off</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{overview.accessDropOffCount}</p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Avg minutes to endpoint</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">
+                {overview.avgMinutesToEndpoint ?? 'N/A'}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Referral completion</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">
+                {formatPercent(overview.referralCompletionRate)}
+              </p>
+            </div>
           </div>
         </article>
       </section>
@@ -388,7 +511,7 @@ export function DashboardView({
               <div key={event.id} className="rounded-2xl bg-slate-50 p-4">
                 <p className="font-medium">{event.eventName}</p>
                 <p className="text-sm text-slate-500">
-                  {event.userId} | {event.accessEndpoint ?? event.tier ?? 'unknown'}
+                  {event.userId} | {event.page ?? event.accessEndpoint ?? event.tier ?? 'unknown'}
                 </p>
                 <p className="text-xs text-slate-400">{event.occurredAt}</p>
               </div>

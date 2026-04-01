@@ -12,9 +12,12 @@ import {
 import {
   beginDemoJourney,
   completeEndpointAction,
+  ensureDemoVisitor,
   getCurrentDemoUserId,
+  getDemoYearOfBirth,
   trackPage,
   trackPathwayDetermination,
+  trackSectionDuration,
 } from './demo-tracker';
 import { SiteShell } from './site-shell';
 
@@ -24,8 +27,18 @@ export function WayfinderContent() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    void trackPage('wayfinder', 'wayfinder');
-    setCurrentUserId(getCurrentDemoUserId());
+    const startTime = Date.now();
+    const userId = ensureDemoVisitor();
+    setCurrentUserId(userId ?? getCurrentDemoUserId());
+    void trackPage('resource_page', 'wayfinder');
+
+    return () => {
+      void trackSectionDuration({
+        page: 'resource_page',
+        source: 'wayfinder',
+        seconds: (Date.now() - startTime) / 1000,
+      });
+    };
   }, []);
 
   async function handleQuickRoute(option: (typeof quickRouteOptions)[number]) {
@@ -154,6 +167,12 @@ export function WayfinderContent() {
             <p className="mt-3 text-sm text-slate-500">
               Current simulated user:{' '}
               <span className="font-medium text-slate-800">{currentUserId ?? 'none yet'}</span>
+            </p>
+            <p className="mt-2 text-sm text-slate-500">
+              Year of birth:{' '}
+              <span className="font-medium text-slate-800">
+                {getDemoYearOfBirth() ?? 'not provided'}
+              </span>
             </p>
           </section>
         </aside>

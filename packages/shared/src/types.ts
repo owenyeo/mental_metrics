@@ -18,6 +18,7 @@ export interface EventProperties {
   session_length_sec?: number;
   source?: string;
   page?: string;
+  year_of_birth?: number;
   timestamp?: string;
   [key: string]: JsonValue | undefined;
 }
@@ -32,6 +33,7 @@ export interface TrackerConfig {
 
 export interface IdentifyTraits {
   ageBand?: string;
+  yearOfBirth?: number;
   referralSource?: string;
   cohort?: string;
   [key: string]: JsonValue | undefined;
@@ -77,6 +79,7 @@ export interface RecentEventItem {
   accessEndpoint?: AccessEndpoint | null;
   interventionType?: string | null;
   referralDestination?: string | null;
+  page?: string | null;
   userId: string;
 }
 
@@ -84,6 +87,21 @@ export interface FunnelStep {
   step: string;
   users: number;
   conversionRate: number;
+}
+
+export interface DropOffStep {
+  fromStep: string;
+  toStep: string;
+  enteredUsers: number;
+  completedUsers: number;
+  conversionRate: number;
+  dropOffRate: number;
+}
+
+export interface SectionTimeMetric {
+  section: 'landing_page' | 'screening_page' | 'resource_page';
+  avgSeconds: number | null;
+  sampleCount: number;
 }
 
 export interface InterventionPerformanceRow {
@@ -97,6 +115,10 @@ export interface InterventionPerformanceRow {
 export interface TrendPoint {
   date: string;
   activeUsers: number;
+  visitors: number;
+  screeningStarts: number;
+  chatStarts: number;
+  resourceClicks: number;
   interventionsStarted: number;
   referralsCompleted: number;
   accessCompletions: number;
@@ -111,8 +133,18 @@ export interface LeakageUser {
 
 export interface AnalyticsOverview {
   totalUsers: number;
+  totalVisitors: number;
   activeUsers: number;
   dailyActiveUsers: number;
+  demographicCoverageRate: number;
+  targetDemographicUsers: number;
+  targetDemographicRate: number;
+  screeningStarts: number;
+  screeningStartRate: number;
+  chatbotStarts: number;
+  chatbotStartRate: number;
+  resourceClicks: number;
+  resourceClickRate: number;
   accessStarts: number;
   accessCompleted: number;
   accessCompletionRate: number;
@@ -128,6 +160,8 @@ export interface AnalyticsOverview {
   endpointDistribution: Record<AccessEndpoint | 'unknown', number>;
   funnel: FunnelStep[];
   accessFunnel: FunnelStep[];
+  dropOffFunnel: DropOffStep[];
+  sectionTimes: SectionTimeMetric[];
   trend: TrendPoint[];
   highRiskLeakageUsers: LeakageUser[];
   recentEvents: RecentEventItem[];
@@ -144,4 +178,7 @@ export interface AnalyticsEventRecord {
   referralDestination?: string | null;
   distressScore?: number | null;
   intakeStep?: string | null;
+  page?: string | null;
+  sessionLengthSec?: number | null;
+  yearOfBirth?: number | null;
 }

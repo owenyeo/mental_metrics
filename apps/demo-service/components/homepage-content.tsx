@@ -1,16 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 import React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   beginDemoJourney,
   completeEndpointAction,
-  getCurrentDemoUserId,
-  trackAndFlush,
-  trackPage,
+  getDemoYearOfBirth,
+  resetDemoJourney,
+  setDemoYearOfBirth,
+  trackLandingVisit,
   trackPathwayDetermination,
+  trackSectionDuration,
+  trackPage,
 } from './demo-tracker';
 import { SiteShell } from './site-shell';
 
@@ -22,14 +25,40 @@ const urgentContacts = [
 
 export function HomepageContent() {
   const [status, setStatus] = useState('Ready to help someone take the first step.');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [yearOfBirth, setYearOfBirthState] = useState<number | ''>('');
+  const yearOptions = useMemo(
+    () => Array.from({ length: 35 }, (_, index) => new Date().getUTCFullYear() - 12 - index),
+    [],
+  );
 
   useEffect(() => {
-    void trackPage('home', 'homepage');
-    void trackAndFlush('landing_viewed', { source: 'homepage' });
+    const startTime = Date.now();
+    const storedYear = getDemoYearOfBirth();
+    setYearOfBirthState(storedYear ?? '');
+
+    void (async () => {
+      const userId = await trackLandingVisit({
+        source: 'homepage',
+        page: 'landing_page',
+        yearOfBirth: storedYear,
+      });
+      setCurrentUserId(userId);
+      await trackPage('landing_page', 'homepage');
+    })();
+
+    return () => {
+      void trackSectionDuration({
+        page: 'landing_page',
+        source: 'homepage',
+        seconds: (Date.now() - startTime) / 1000,
+      });
+    };
   }, []);
 
   async function handleUrgentSupport() {
     const userId = await beginDemoJourney('homepage_urgent_support');
+    setCurrentUserId(userId);
     await trackPathwayDetermination({
       tier: 'unwell',
       endpoint: 'crisis_support',
@@ -44,6 +73,35 @@ export function HomepageContent() {
     setStatus(`Urgent support options opened for ${userId}.`);
   }
 
+  async function handleNewVisitor() {
+    resetDemoJourney();
+    const userId = await trackLandingVisit({
+      source: 'homepage_new_visit',
+      page: 'landing_page',
+      yearOfBirth: yearOfBirth === '' ? null : yearOfBirth,
+    });
+    setCurrentUserId(userId);
+    setStatus(`Started a new simulated visitor: ${userId}.`);
+  }
+
+  async function handleYearOfBirthChange(nextValue: string) {
+    const parsed = nextValue ? Number(nextValue) : null;
+    setYearOfBirthState(parsed ?? '');
+
+    if (!parsed) {
+      return;
+    }
+
+    setDemoYearOfBirth(parsed);
+    const userId = await trackLandingVisit({
+      source: 'homepage_demographic_capture',
+      page: 'landing_page',
+      yearOfBirth: parsed,
+    });
+    setCurrentUserId(userId);
+    setStatus(`Year of birth captured for ${userId}.`);
+  }
+
   return (
     <SiteShell active="home">
       <section className="grid gap-8 px-1 py-10 lg:grid-cols-[1.12fr_0.88fr] lg:items-start">
@@ -56,9 +114,37 @@ export function HomepageContent() {
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600">
             This demo mirrors the tone of a public support service: calm, clear, and easy to act on.
-            Under the surface, every key step is tracked into the Service Intelligence Layer so
-            providers can measure access, drop-off, escalation, and pathway completion.
+            It now also tracks who the service is reaching, whether visitors begin accessing help,
+            where they leave the flow, and how long they spend in each section.
           </p>
+
+          <div className="mt-8 grid gap-4 rounded-[1.75rem] bg-slate-50 p-5 md:grid-cols-[1fr_auto] md:items-end">
+            <label className="block">
+              <span className="text-sm font-medium text-slate-700">
+                Year of birth for demographic reach tracking
+              </span>
+              <select
+                aria-label="Year of birth"
+                value={yearOfBirth}
+                onChange={(event) => void handleYearOfBirthChange(event.target.value)}
+                className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-4"
+              >
+                <option value="">Prefer not to say</option>
+                {yearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => void handleNewVisitor()}
+              className="rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-700"
+            >
+              Start new demo visitor
+            </button>
+          </div>
 
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -77,21 +163,24 @@ export function HomepageContent() {
 
           <div className="mt-10 grid gap-4 md:grid-cols-3">
             <div className="rounded-3xl bg-emerald-50 p-5">
-              <p className="text-sm font-medium text-emerald-800">Low pressure</p>
+              <p className="text-sm font-medium text-emerald-800">Reach</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Start with quick routes if you already know what would help.
+                Visitors can share year of birth without revealing identity, so the dashboard can
+                measure target-demographic reach.
               </p>
             </div>
             <div className="rounded-3xl bg-amber-50 p-5">
-              <p className="text-sm font-medium text-amber-800">Clear next steps</p>
+              <p className="text-sm font-medium text-amber-800">Activation</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Every route leads to a concrete endpoint such as self-help, chat, or referral.
+                Starts of screening, chat, and resource clicks are treated as meaningful first
+                actions.
               </p>
             </div>
             <div className="rounded-3xl bg-rose-50 p-5">
-              <p className="text-sm font-medium text-rose-800">Urgent help first</p>
+              <p className="text-sm font-medium text-rose-800">Drop-off and time spent</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Crisis and emergency options stay visible so immediate intervention is never buried.
+                Each page records dwell time so the dashboard can spot confusing or overloaded
+                sections.
               </p>
             </div>
           </div>
@@ -139,8 +228,12 @@ export function HomepageContent() {
             </p>
             <p className="mt-3 text-sm text-slate-500">
               Current simulated user:{' '}
+              <span className="font-medium text-slate-800">{currentUserId ?? 'none yet'}</span>
+            </p>
+            <p className="mt-2 text-sm text-slate-500">
+              Selected year of birth:{' '}
               <span className="font-medium text-slate-800">
-                {getCurrentDemoUserId() ?? 'none yet'}
+                {yearOfBirth === '' ? 'not provided' : yearOfBirth}
               </span>
             </p>
           </section>

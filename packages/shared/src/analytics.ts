@@ -11,12 +11,28 @@ import type {
   AnalyticsEventRecord,
   AnalyticsOverview,
   DateRangeFilter,
+  DropOffStep,
   FunnelStep,
   InterventionPerformanceRow,
   LeakageUser,
+  SectionTimeMetric,
   TrendPoint,
 } from './types';
 import { deriveTierFromDistressScore } from './tier';
+
+const TARGET_AGE_MIN = 13;
+const TARGET_AGE_MAX = 24;
+const FURTHER_RESOURCE_EVENTS = [
+  'resource_clicked',
+  'chat_requested',
+  'intervention_started',
+  'referral_started',
+] as const;
+const SECTION_NAMES: SectionTimeMetric['section'][] = [
+  'landing_page',
+  'screening_page',
+  'resource_page',
+];
 
 function inRange(date: string, filter: DateRangeFilter): boolean {
   return isWithinInterval(parseISO(date), {
@@ -32,6 +48,14 @@ function normalizeTier(record: AnalyticsEventRecord): Tier | 'unknown' {
 function userSet(events: AnalyticsEventRecord[], eventName?: string): Set<string> {
   const selected = eventName ? events.filter((event) => event.eventName === eventName) : events;
   return new Set(selected.map((event) => event.userId));
+}
+
+function userSetForAny(events: AnalyticsEventRecord[], eventNames: readonly string[]): Set<string> {
+  return new Set(
+    events
+      .filter((event) => eventNames.includes(event.eventName))
+      .map((event) => event.userId),
+  );
 }
 
 function intersectUsers(left: Set<string>, right: Set<string>): Set<string> {
@@ -60,6 +84,53 @@ function averageMinutes(numbers: number[]): number | null {
   }
 
   return Number((numbers.reduce((sum, value) => sum + value, 0) / numbers.length).toFixed(1));
+}
+
+function latestEventWithValue<T>(
+  events: AnalyticsEventRecord[],
+  selector: (event: AnalyticsEventRecord) => T | null | undefined,
+): T | null {
+  const latest = [...events]
+    .filter((event) => selector(event) !== null && selector(event) !== undefined)
+    .sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime())[0];
+
+  return latest ? (selector(latest) ?? null) : null;
+}
+
+function ageFromYearOfBirth(yearOfBirth: number, referenceDate: string): number {
+  return new Date(referenceDate).getUTCFullYear() - yearOfBirth;
+}
+
+function targetDemographicUsers(events: AnalyticsEventRecord[], referenceDate: string) {
+  const byUser = new Map<string, AnalyticsEventRecord[]>();
+
+  for (const event of events) {
+    const current = byUser.get(event.userId) ?? [];
+    current.push(event);
+    byUser.set(event.userId, current);
+  }
+
+  let withYearOfBirth = 0;
+  let inTarget = 0;
+
+  for (const userEvents of byUser.values()) {
+    const yearOfBirth = latestEventWithValue(userEvents, (event) => event.yearOfBirth);
+
+    if (!yearOfBirth) {
+      continue;
+    }
+
+    withYearOfBirth += 1;
+    const age = ageFromYearOfBirth(yearOfBirth, referenceDate);
+    if (age >= TARGET_AGE_MIN && age <= TARGET_AGE_MAX) {
+      inTarget += 1;
+    }
+  }
+
+  return {
+    withYearOfBirth,
+    inTarget,
+  };
 }
 
 export function filterAnalyticsEvents(
@@ -187,6 +258,53 @@ export function buildAccessFunnel(events: AnalyticsEventRecord[]): FunnelStep[] 
   ];
 }
 
+export function buildDropOffFunnel(events: AnalyticsEventRecord[]): DropOffStep[] {
+  const landingUsers = userSet(events, 'landing_viewed');
+  const cohortStart = landingUsers.size > 0 ? landingUsers : userSet(events);
+  const screeningStartedUsers = intersectUsers(cohortStart, userSet(events, 'screening_started'));
+  const screeningCompletedUsers = intersectUsers(
+    screeningStartedUsers,
+    userSet(events, 'screening_completed'),
+  );
+  const furtherResourceUsers = intersectUsers(
+    screeningCompletedUsers,
+    userSetForAny(events, FURTHER_RESOURCE_EVENTS),
+  );
+
+  return [
+    {
+      fromStep: 'landing_viewed',
+      toStep: 'screening_started',
+      enteredUsers: cohortStart.size,
+      completedUsers: screeningStartedUsers.size,
+      conversionRate: conversionRate(screeningStartedUsers.size, cohortStart.size),
+      dropOffRate: conversionRate(cohortStart.size - screeningStartedUsers.size, cohortStart.size),
+    },
+    {
+      fromStep: 'screening_started',
+      toStep: 'screening_completed',
+      enteredUsers: screeningStartedUsers.size,
+      completedUsers: screeningCompletedUsers.size,
+      conversionRate: conversionRate(screeningCompletedUsers.size, screeningStartedUsers.size),
+      dropOffRate: conversionRate(
+        screeningStartedUsers.size - screeningCompletedUsers.size,
+        screeningStartedUsers.size,
+      ),
+    },
+    {
+      fromStep: 'screening_completed',
+      toStep: 'further_resource_use',
+      enteredUsers: screeningCompletedUsers.size,
+      completedUsers: furtherResourceUsers.size,
+      conversionRate: conversionRate(furtherResourceUsers.size, screeningCompletedUsers.size),
+      dropOffRate: conversionRate(
+        screeningCompletedUsers.size - furtherResourceUsers.size,
+        screeningCompletedUsers.size,
+      ),
+    },
+  ];
+}
+
 export function buildInterventionPerformance(
   events: AnalyticsEventRecord[],
 ): InterventionPerformanceRow[] {
@@ -235,6 +353,10 @@ export function buildTrend(events: AnalyticsEventRecord[], filter: DateRangeFilt
     points.set(key, {
       date: key,
       activeUsers: 0,
+      visitors: 0,
+      screeningStarts: 0,
+      chatStarts: 0,
+      resourceClicks: 0,
       interventionsStarted: 0,
       referralsCompleted: 0,
       accessCompletions: 0,
@@ -247,15 +369,13 @@ export function buildTrend(events: AnalyticsEventRecord[], filter: DateRangeFilt
     );
 
     bucket.activeUsers = new Set(dailyEvents.map((event) => event.userId)).size;
-    bucket.interventionsStarted = dailyEvents.filter(
-      (event) => event.eventName === 'intervention_started',
-    ).length;
-    bucket.referralsCompleted = dailyEvents.filter(
-      (event) => event.eventName === 'referral_completed',
-    ).length;
-    bucket.accessCompletions = dailyEvents.filter(
-      (event) => event.eventName === 'access_flow_completed',
-    ).length;
+    bucket.visitors = userSet(dailyEvents, 'landing_viewed').size;
+    bucket.screeningStarts = userSet(dailyEvents, 'screening_started').size;
+    bucket.chatStarts = userSet(dailyEvents, 'chat_requested').size;
+    bucket.resourceClicks = userSet(dailyEvents, 'resource_clicked').size;
+    bucket.interventionsStarted = userSet(dailyEvents, 'intervention_started').size;
+    bucket.referralsCompleted = userSet(dailyEvents, 'referral_completed').size;
+    bucket.accessCompletions = userSet(dailyEvents, 'access_flow_completed').size;
   }
 
   return Array.from(points.values());
@@ -371,6 +491,23 @@ function buildMinutesToEndpoint(events: AnalyticsEventRecord[]): number | null {
   return averageMinutes(durations);
 }
 
+function buildSectionTimes(events: AnalyticsEventRecord[]): SectionTimeMetric[] {
+  return SECTION_NAMES.map((section) => {
+    const relevant = events.filter(
+      (event) =>
+        event.eventName === 'page_viewed' &&
+        event.page === section &&
+        typeof event.sessionLengthSec === 'number',
+    );
+
+    return {
+      section,
+      avgSeconds: average(relevant.map((event) => event.sessionLengthSec as number)),
+      sampleCount: relevant.length,
+    };
+  });
+}
+
 function buildEndpointDistribution(
   events: AnalyticsEventRecord[],
 ): Record<AccessEndpoint | 'unknown', number> {
@@ -412,8 +549,14 @@ export function buildAnalyticsOverview(
   const filtered = filterAnalyticsEvents(events, filter);
   const funnel = buildFunnel(filtered);
   const accessFunnel = buildAccessFunnel(filtered);
+  const dropOffFunnel = buildDropOffFunnel(filtered);
   const leakageUsers = buildHighRiskLeakage(filtered);
-  const accessStartedUsers = userSet(filtered, 'access_intake_started').size || userSet(filtered, 'screening_started').size;
+  const totalVisitors = userSet(filtered, 'landing_viewed').size || userSet(filtered).size;
+  const screeningStartedUsers = userSet(filtered, 'screening_started').size;
+  const chatbotStartedUsers = userSet(filtered, 'chat_requested').size;
+  const resourceClickUsers = userSet(filtered, 'resource_clicked').size;
+  const accessStartedUsers =
+    userSet(filtered, 'access_intake_started').size || screeningStartedUsers;
   const accessCompletedUsers = userSet(filtered, 'access_flow_completed').size;
   const interventionStartedUsers = userSet(filtered, 'intervention_started').size;
   const interventionCompletedUsers = userSet(filtered, 'intervention_completed').size;
@@ -434,14 +577,32 @@ export function buildAnalyticsOverview(
     tiers[normalizeTier(latest)] += 1;
   }
 
+  const demographicSummary = targetDemographicUsers(
+    filtered.filter((event) => event.eventName === 'landing_viewed' || event.eventName === 'screening_started'),
+    filter.to,
+  );
+
   return {
     totalUsers: userSet(filtered).size,
+    totalVisitors,
     activeUsers: userSet(filtered).size,
     dailyActiveUsers: buildTrend(filtered, filter).slice(-1)[0]?.activeUsers ?? 0,
+    demographicCoverageRate: conversionRate(demographicSummary.withYearOfBirth, totalVisitors),
+    targetDemographicUsers: demographicSummary.inTarget,
+    targetDemographicRate: conversionRate(demographicSummary.inTarget, totalVisitors),
+    screeningStarts: screeningStartedUsers,
+    screeningStartRate: conversionRate(screeningStartedUsers, totalVisitors),
+    chatbotStarts: chatbotStartedUsers,
+    chatbotStartRate: conversionRate(chatbotStartedUsers, totalVisitors),
+    resourceClicks: resourceClickUsers,
+    resourceClickRate: conversionRate(resourceClickUsers, totalVisitors),
     accessStarts: accessStartedUsers,
     accessCompleted: accessCompletedUsers,
     accessCompletionRate: conversionRate(accessCompletedUsers, accessStartedUsers),
-    accessDropOffCount: Math.max(accessStartedUsers - userSet(filtered, 'care_pathway_determined').size, 0),
+    accessDropOffCount: Math.max(
+      accessStartedUsers - userSet(filtered, 'care_pathway_determined').size,
+      0,
+    ),
     avgMinutesToEndpoint: buildMinutesToEndpoint(filtered),
     interventionUptakeRate: conversionRate(interventionStartedUsers, screeningCompletedUsers),
     interventionCompletionRate: conversionRate(
@@ -458,6 +619,8 @@ export function buildAnalyticsOverview(
     ),
     funnel,
     accessFunnel,
+    dropOffFunnel,
+    sectionTimes: buildSectionTimes(filtered),
     trend: buildTrend(filtered, filter),
     highRiskLeakageUsers: leakageUsers,
     recentEvents: filtered
@@ -471,6 +634,7 @@ export function buildAnalyticsOverview(
         accessEndpoint: event.accessEndpoint ?? null,
         interventionType: event.interventionType ?? null,
         referralDestination: event.referralDestination ?? null,
+        page: event.page ?? null,
         userId: event.userId,
       })),
   };

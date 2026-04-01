@@ -23,6 +23,7 @@ export const eventPropertiesSchema = z
     session_length_sec: z.number().int().min(0).max(60 * 60 * 12).optional(),
     source: z.string().min(1).max(120).optional(),
     page: z.string().min(1).max(120).optional(),
+    year_of_birth: z.number().int().min(1900).max(2100).optional(),
     timestamp: z.string().datetime().optional(),
   })
   .catchall(jsonValueSchema)
@@ -31,6 +32,7 @@ export const eventPropertiesSchema = z
 export const identifyTraitsSchema = z
   .object({
     ageBand: z.string().min(1).max(40).optional(),
+    yearOfBirth: z.number().int().min(1900).max(2100).optional(),
     referralSource: z.string().min(1).max(80).optional(),
     cohort: z.string().min(1).max(80).optional(),
   })

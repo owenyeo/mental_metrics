@@ -4,7 +4,8 @@ import { createTracker } from '@sil/sdk';
 import type { AccessEndpoint, Tier } from '@sil/shared';
 
 const tracker = createTracker();
-const STORAGE_KEY = 'demo_service_current_user_id';
+const USER_STORAGE_KEY = 'demo_service_current_user_id';
+const YEAR_STORAGE_KEY = 'demo_service_year_of_birth';
 
 let initialized = false;
 
@@ -18,6 +19,32 @@ function safeSessionStorage(): Storage | undefined {
   } catch {
     return undefined;
   }
+}
+
+function deriveAgeBand(yearOfBirth?: number | null) {
+  if (!yearOfBirth) {
+    return '16-18';
+  }
+
+  const age = new Date().getUTCFullYear() - yearOfBirth;
+
+  if (age <= 15) {
+    return '13-15';
+  }
+
+  if (age <= 18) {
+    return '16-18';
+  }
+
+  return '19-24';
+}
+
+function currentTraits(yearOfBirth?: number | null) {
+  return {
+    cohort: 'mindline-style-demo',
+    ageBand: deriveAgeBand(yearOfBirth),
+    yearOfBirth: yearOfBirth ?? undefined,
+  };
 }
 
 export function initDemoTracker() {
@@ -45,28 +72,117 @@ export async function trackAndFlush(
 
 export async function trackPage(screenName: string, source: string) {
   initDemoTracker();
-  await tracker.page(screenName, { source });
+  await tracker.page(screenName, { source, page: screenName });
   await tracker.flush();
 }
 
 export function getCurrentDemoUserId(): string | null {
-  return safeSessionStorage()?.getItem(STORAGE_KEY) ?? null;
+  return safeSessionStorage()?.getItem(USER_STORAGE_KEY) ?? null;
 }
 
-export async function beginDemoJourney(source: string, ageBand = '16-18') {
+export function getDemoYearOfBirth(): number | null {
+  const value = safeSessionStorage()?.getItem(YEAR_STORAGE_KEY);
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function setDemoYearOfBirth(yearOfBirth: number) {
   initDemoTracker();
-  tracker.reset();
-  const userId = `demo-user-${Date.now()}`;
-  tracker.identify(userId, { cohort: 'mindline-style-demo', ageBand });
-  safeSessionStorage()?.setItem(STORAGE_KEY, userId);
+  safeSessionStorage()?.setItem(YEAR_STORAGE_KEY, String(yearOfBirth));
+  const currentUserId = getCurrentDemoUserId();
+
+  if (currentUserId) {
+    tracker.identify(currentUserId, currentTraits(yearOfBirth));
+  }
+}
+
+export function ensureDemoVisitor({
+  forceNew = false,
+  yearOfBirth,
+}: {
+  forceNew?: boolean;
+  yearOfBirth?: number | null;
+} = {}) {
+  initDemoTracker();
+
+  const storedYearOfBirth = yearOfBirth ?? getDemoYearOfBirth();
+  let userId = forceNew ? null : getCurrentDemoUserId();
+
+  if (!userId) {
+    tracker.reset();
+    userId = `demo-user-${Date.now()}`;
+  }
+
+  tracker.identify(userId, currentTraits(storedYearOfBirth));
+  safeSessionStorage()?.setItem(USER_STORAGE_KEY, userId);
+
+  if (storedYearOfBirth) {
+    safeSessionStorage()?.setItem(YEAR_STORAGE_KEY, String(storedYearOfBirth));
+  }
+
+  return userId;
+}
+
+export async function trackLandingVisit({
+  source,
+  page,
+  yearOfBirth,
+}: {
+  source: string;
+  page: string;
+  yearOfBirth?: number | null;
+}) {
+  const userId = ensureDemoVisitor({ yearOfBirth });
+  await trackAndFlush('landing_viewed', {
+    source,
+    page,
+    year_of_birth: yearOfBirth ?? getDemoYearOfBirth() ?? undefined,
+  });
+
+  return userId;
+}
+
+export async function beginDemoJourney(source: string) {
+  const userId = ensureDemoVisitor();
+  const yearOfBirth = getDemoYearOfBirth();
 
   await trackAndFlush('access_intake_started', {
     source,
     intake_step: 'entry',
+    year_of_birth: yearOfBirth ?? undefined,
   });
-  await trackAndFlush('screening_started', { source });
+  await trackAndFlush('screening_started', {
+    source,
+    year_of_birth: yearOfBirth ?? undefined,
+  });
 
   return userId;
+}
+
+export async function trackSectionDuration({
+  page,
+  source,
+  seconds,
+}: {
+  page: 'landing_page' | 'screening_page' | 'resource_page';
+  source: string;
+  seconds: number;
+}) {
+  if (seconds < 0) {
+    return;
+  }
+
+  ensureDemoVisitor();
+  await trackAndFlush('page_viewed', {
+    page,
+    source,
+    session_length_sec: Math.round(seconds),
+    year_of_birth: getDemoYearOfBirth() ?? undefined,
+  });
 }
 
 function endpointMeta(endpoint: AccessEndpoint) {
@@ -115,10 +231,12 @@ export async function trackPathwayDetermination({
     source,
     tier,
     distress_score: distressScore,
+    year_of_birth: getDemoYearOfBirth() ?? undefined,
   });
   await trackAndFlush('screening_completed', {
     distress_score: distressScore,
     tier,
+    year_of_birth: getDemoYearOfBirth() ?? undefined,
   });
   await trackAndFlush('care_pathway_determined', {
     tier,
@@ -126,6 +244,7 @@ export async function trackPathwayDetermination({
     referral_destination: metadata.referralDestination,
     intervention_type: metadata.interventionType,
     source,
+    year_of_birth: getDemoYearOfBirth() ?? undefined,
   });
 
   if (tier === 'unwell') {
@@ -221,5 +340,5 @@ export async function completeEndpointAction({
 
 export function resetDemoJourney() {
   tracker.reset();
-  safeSessionStorage()?.removeItem(STORAGE_KEY);
+  safeSessionStorage()?.removeItem(USER_STORAGE_KEY);
 }

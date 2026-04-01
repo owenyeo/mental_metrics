@@ -12,10 +12,13 @@ import {
 import {
   beginDemoJourney,
   completeEndpointAction,
+  ensureDemoVisitor,
   getCurrentDemoUserId,
+  getDemoYearOfBirth,
   trackAndFlush,
   trackPage,
   trackPathwayDetermination,
+  trackSectionDuration,
 } from './demo-tracker';
 import { SiteShell } from './site-shell';
 
@@ -29,8 +32,18 @@ export function QuestionnaireContent() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    void trackPage('questionnaire', 'questionnaire');
-    setCurrentUserId(getCurrentDemoUserId());
+    const startTime = Date.now();
+    const userId = ensureDemoVisitor();
+    setCurrentUserId(userId ?? getCurrentDemoUserId());
+    void trackPage('screening_page', 'questionnaire');
+
+    return () => {
+      void trackSectionDuration({
+        page: 'screening_page',
+        source: 'questionnaire',
+        seconds: (Date.now() - startTime) / 1000,
+      });
+    };
   }, []);
 
   const recommendation = determineQuestionnaireRecommendation(answers);
@@ -292,6 +305,12 @@ export function QuestionnaireContent() {
             <p className="mt-3 text-sm text-slate-500">
               Current simulated user:{' '}
               <span className="font-medium text-slate-800">{currentUserId ?? 'none yet'}</span>
+            </p>
+            <p className="mt-2 text-sm text-slate-500">
+              Year of birth:{' '}
+              <span className="font-medium text-slate-800">
+                {getDemoYearOfBirth() ?? 'not provided'}
+              </span>
             </p>
           </section>
         </aside>

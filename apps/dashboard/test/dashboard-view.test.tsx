@@ -30,8 +30,18 @@ vi.mock('recharts', () => ({
 
 const overview: AnalyticsOverview = {
   totalUsers: 12,
+  totalVisitors: 18,
   activeUsers: 8,
   dailyActiveUsers: 5,
+  demographicCoverageRate: 66.7,
+  targetDemographicUsers: 11,
+  targetDemographicRate: 61.1,
+  screeningStarts: 9,
+  screeningStartRate: 50,
+  chatbotStarts: 4,
+  chatbotStartRate: 22.2,
+  resourceClicks: 6,
+  resourceClickRate: 33.3,
   accessStarts: 10,
   accessCompleted: 7,
   accessCompletionRate: 70,
@@ -64,10 +74,29 @@ const overview: AnalyticsOverview = {
     { step: 'access_intake_started', users: 10, conversionRate: 100 },
     { step: 'screening_completed', users: 9, conversionRate: 90 },
   ],
+  dropOffFunnel: [
+    {
+      fromStep: 'landing_viewed',
+      toStep: 'screening_started',
+      enteredUsers: 18,
+      completedUsers: 9,
+      conversionRate: 50,
+      dropOffRate: 50,
+    },
+  ],
+  sectionTimes: [
+    { section: 'landing_page', avgSeconds: 42, sampleCount: 5 },
+    { section: 'screening_page', avgSeconds: 95, sampleCount: 4 },
+    { section: 'resource_page', avgSeconds: 61, sampleCount: 3 },
+  ],
   trend: [
     {
       date: '2026-03-01',
       activeUsers: 3,
+      visitors: 4,
+      screeningStarts: 2,
+      chatStarts: 1,
+      resourceClicks: 1,
       interventionsStarted: 1,
       referralsCompleted: 0,
       accessCompletions: 2,
@@ -90,6 +119,7 @@ const overview: AnalyticsOverview = {
       accessEndpoint: 'peer_support',
       interventionType: null,
       referralDestination: null,
+      page: null,
       userId: 'user-2',
     },
   ],
@@ -124,8 +154,8 @@ describe('DashboardView', () => {
       />,
     );
 
-    expect(screen.getByTestId('kpi-total-users')).toHaveTextContent('12');
-    expect(screen.getByTestId('funnel-chart')).toHaveTextContent('access_intake_started');
+    expect(screen.getByTestId('kpi-total-users')).toHaveTextContent('18');
+    expect(screen.getByTestId('funnel-chart')).toHaveTextContent('landing viewed to screening started');
     expect(screen.getByTestId('intervention-table')).toHaveTextContent('guided_breathing');
     expect(screen.getByTestId('leakage-panel')).toHaveTextContent('crisis_button_clicked');
   });
